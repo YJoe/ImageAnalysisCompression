@@ -8,8 +8,12 @@ class Node:
     def print_details(self):
         if self.left_node is not None:
             print "left      [", self.left_node.value, "]"
+        else:
+            print "left      [ IS NULL ]"
         if self.right_node is not None:
             print "right     [", self.right_node.value, "]"
+        else:
+            print "right     [ IS NULL ]"
 
         print "value     [", self.value, "]"
         print "frequency [", self.frequency, "]"
@@ -59,7 +63,7 @@ def append_to_node_tree(root, node_values):
         if node_values[0].frequency >= root.frequency:
             left_node = Node(None, None, node_values[0].value, node_values[0].frequency)
             del node_values[0]
-            root = Node(left_node, root, str(left_node.value + root.value), left_node.frequency + root.frequency)
+            root = Node(left_node, root, str(root.value + left_node.value), left_node.frequency + root.frequency)
             root, node_values = append_to_node_tree(root, node_values)
             break
 
@@ -101,21 +105,38 @@ def create_tree(node_values):
 
 
 def encode_char(root, char, code):
+    # print "///////////////////////////////"
+    # print "CHAR IS         [", char, "]"
+    # print "CURRENT ROOT IS [", root.value, "]"
+    # print "CURRENT CODE IS [", code, "]"
+    # root.print_details()
+    # print "///////////////////////////////"
 
     if char == root.value:
+        # print "MATCH!"
         return code
 
-    elif char in root.left_node.value:
+    elif root.left_node is not None and char in root.left_node.value:
         code += "0"
         return encode_char(root.left_node, char, code)
 
-    elif char in root.right_node.value:
+    elif root.right_node is not None and char in root.right_node.value:
         code += "1"
         return encode_char(root.right_node, char, code)
 
+    else:
+        return "?"
+
 
 def encode(root, regular_text):
-    return "".join(encode_char(root, letter, "") for letter in regular_text)
+    encoded = ""
+
+    for letter in regular_text:
+        encoded_letter = encode_char(root, letter, "")
+        #print "ENCODED CHAR IS [", encoded_letter, "]"
+        encoded += encoded_letter
+
+    return encoded
 
 
 def decode_char(root, code):
@@ -133,13 +154,10 @@ def decode(root, code):
     output = ""
 
     while code != "":
-        print "\nCode is now [", code, "]"
         for i in range(1, len(code) + 1):
             code_segment = code[0:i]
-            print "\tsampling [", code_segment, "]"
             d = decode_char(root, code_segment)
             if d is not None:
-                print "FOUND A BLOODY MATCH! [", code_segment, "] == [", d, "]"
                 output += d
                 code = code[i:]
                 break
@@ -150,13 +168,14 @@ def decode(root, code):
 if __name__ == "__main__":
 
     # get some data to create a tree for
-    text = "THIS IS SOME TEXT"
+    # text = "Why hello there there, this is s"
+    text = "abcdefaa"
     frequency_list = get_frequency_list(text)
     node_list = create_nodes(frequency_list)
 
-    print "All nodes"
-    for node in node_list:
-        node.print_details()
+    # print "All nodes"
+    # for node in node_list:
+    #     node.print_details()
 
     root_node = create_tree(node_list)[0]
 
@@ -167,6 +186,7 @@ if __name__ == "__main__":
     encoded_text = encode(root_node, text)
     print encoded_text
 
+    print "\nDecoding [", encoded_text, "]"
     print decode(root_node, encoded_text)
 
 
