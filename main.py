@@ -59,32 +59,40 @@ def create_nodes(frequency_data):
 
 
 def append_to_node_tree(root, node_values):
+    print "\t\t\tTrying to append to root [", root.value, "(", root.frequency, ")] something form [", ",".join(str(n.value) + "(" + str(n.frequency) + ")" for n in node_values), "]"
     for i in range(0, len(node_values)):
         if node_values[0].frequency >= root.frequency:
-            left_node = Node(None, None, node_values[0].value, node_values[0].frequency)
+            print "\t\t\t\tThe next node frequency [", node_values[0].frequency, "] is >= [", root.frequency, "]"
+            left_node = node_values[0]
             del node_values[0]
-            root = Node(left_node, root, str(root.value + left_node.value), left_node.frequency + root.frequency)
-            root, node_values = append_to_node_tree(root, node_values)
-            break
+            root = Node(left_node, root, str(left_node.value + root.value), left_node.frequency + root.frequency)
+            print "\t\t\t\t\tAppended left node [", left_node.value, "] to existing tree"
+            return append_to_node_tree(root, node_values)
 
-    return root, node_values
+    # return the new root node and the node values that remain, if there are no node values then return an empty []
+    return root, [] if node_values is None else node_values
 
 
 def create_tree(node_values):
+
+    print "\nCreating tree"
 
     roots = []
 
     # while there are still frequency values that haven't been appended to a tree
     while len(node_values) != 0:
 
+        print "\tThere are still frequency values [", ",".join(str(n.value) + "(" + str(n.frequency) + ")" for n in node_values), "]"
+
         # if we can't make a pair then this single element should be in its own tree
         if len(node_values) == 1:
+            print "\t\tWe can't make a pair though so placing [", node_values[0].value, "] in its own tree"
             root = node_values[0]
             del node_values[0]
 
         # we can make a pair so we will make a tree with them
         else:
-
+            print "\t\tThere are at least two nodes left, creating pair"
             # start a tree
             left = node_values[1]
             right = node_values[0]
@@ -99,44 +107,33 @@ def create_tree(node_values):
         roots.append(root)
 
     if len(roots) != 1:
+        # make sure that our roots are still ordered by frequency
+        roots = sorted(roots, key=lambda n: n.frequency)
         roots = create_tree(roots)
 
     return roots
 
 
 def encode_char(root, char, code):
-    # print "///////////////////////////////"
-    # print "CHAR IS         [", char, "]"
-    # print "CURRENT ROOT IS [", root.value, "]"
-    # print "CURRENT CODE IS [", code, "]"
-    # root.print_details()
-    # print "///////////////////////////////"
 
     if char == root.value:
-        # print "MATCH!"
         return code
 
-    elif root.left_node is not None and char in root.left_node.value:
+    elif char in root.left_node.value:
         code += "0"
         return encode_char(root.left_node, char, code)
 
-    elif root.right_node is not None and char in root.right_node.value:
+    elif char in root.right_node.value:
         code += "1"
         return encode_char(root.right_node, char, code)
 
     else:
+        print "ERROR WHILE DECODING"
         return "?"
 
 
 def encode(root, regular_text):
-    encoded = ""
-
-    for letter in regular_text:
-        encoded_letter = encode_char(root, letter, "")
-        #print "ENCODED CHAR IS [", encoded_letter, "]"
-        encoded += encoded_letter
-
-    return encoded
+    return "".join(encode_char(root, letter, "") for letter in regular_text)
 
 
 def decode_char(root, code):
@@ -168,14 +165,13 @@ def decode(root, code):
 if __name__ == "__main__":
 
     # get some data to create a tree for
-    # text = "Why hello there there, this is s"
-    text = "abcdefaa"
+    text = "This is a message to encode, I'm going to make it long so that I can check that it works... I think it does now but who knows, maybe this will break it"
     frequency_list = get_frequency_list(text)
     node_list = create_nodes(frequency_list)
 
-    # print "All nodes"
-    # for node in node_list:
-    #     node.print_details()
+    print "All nodes"
+    for node in node_list:
+        print node.value, " ", node.frequency
 
     root_node = create_tree(node_list)[0]
 
@@ -188,5 +184,4 @@ if __name__ == "__main__":
 
     print "\nDecoding [", encoded_text, "]"
     print decode(root_node, encoded_text)
-
 
