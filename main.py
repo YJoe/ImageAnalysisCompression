@@ -1,3 +1,7 @@
+import numpy
+import cv2
+
+
 class Node:
     def __init__(self, left_node, right_node, value, frequency):
         self.left_node = left_node
@@ -17,6 +21,14 @@ class Node:
 
         print "value     [", self.value, "]"
         print "frequency [", self.frequency, "]"
+
+
+def print_network(root, tab):
+    print tab, "[", root.value, ":", root.frequency, "]"
+    if root.left_node is not None:
+        print_network(root.left_node, tab + "\t0")
+    if root.right_node is not None:
+        print_network(root.right_node, tab + "\t1")
 
 
 def get_frequency_list(data):
@@ -165,7 +177,7 @@ def decode(root, code):
 if __name__ == "__main__":
 
     # get some data to create a tree for
-    text = "This is a message to encode, I'm going to make it long so that I can check that it works... I think it does now but who knows, maybe this will break it"
+    text = "ABCDA"
     frequency_list = get_frequency_list(text)
     node_list = create_nodes(frequency_list)
 
@@ -184,4 +196,9 @@ if __name__ == "__main__":
 
     print "\nDecoding [", encoded_text, "]"
     print decode(root_node, encoded_text)
+
+    print_network(root_node, "")
+
+    print decode(root_node, "01")
+
 
