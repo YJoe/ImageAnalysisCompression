@@ -1,5 +1,6 @@
 import numpy
 import cv2
+import time
 
 
 class Node:
@@ -162,10 +163,9 @@ def decode_char(root, code):
 def decode(root, code):
     output = ""
 
-    while code != "":
-        for i in range(1, len(code) + 1):
-            code_segment = code[0:i]
-            d = decode_char(root, code_segment)
+    while len(code) != 0:
+        for i in range(1, 10):
+            d = decode_char(root, code[0:i])
             if d is not None:
                 output += d
                 code = code[i:]
@@ -174,31 +174,65 @@ def decode(root, code):
     return output
 
 
+def image_to_string(image):
+
+    height, width, depth = image.shape
+    flat = image.flatten()
+
+    image_string = "[" + str(width) + "," + str(height) + "," + str(depth) + "]"
+
+    for i in range(0, len(flat) / 3, 3):
+        image_string += "[" + ",".join(str(flat[i + j]) for j in range(0, 3)) + "]"
+
+    return image_string
+
+
+def dct_level_off(image, sub):
+    return image - [sub, sub, sub]
+
+
+if __name__ == "__main2__":
+    img = cv2.imread('images/planet.jpg', 1)
+    cv2.imshow("", img)
+    cv2.waitKey()
+    cv2.destroyAllWindows()
+
+    cv2.dct()
+
+    print img[200][200]
+    img = dct_level_off(img, 128)
+    print img[200][200]
+
+
 if __name__ == "__main__":
 
-    # get some data to create a tree for
-    text = "ABCDA"
+    img = cv2.imread('images/turtle.jpg', 1)
+    cv2.imshow("", img)
+    cv2.waitKey()
+    cv2.destroyAllWindows()
+
+    start_time = time.time()
+    text = image_to_string(img)
     frequency_list = get_frequency_list(text)
     node_list = create_nodes(frequency_list)
-
-    print "All nodes"
-    for node in node_list:
-        print node.value, " ", node.frequency
-
     root_node = create_tree(node_list)[0]
-
-    print "\nRoot node of tree"
-    root_node.print_details()
-
-    print "\nEncoding [", text, "]"
-    encoded_text = encode(root_node, text)
-    print encoded_text
-
-    print "\nDecoding [", encoded_text, "]"
-    print decode(root_node, encoded_text)
-
     print_network(root_node, "")
+    end_time = time.time()
+    print "Tree creation time [", end_time - start_time, "]"
 
-    print decode(root_node, "01")
+    print "\nEncoding string"
+    start_time = time.time()
+    encoded_text = encode(root_node, text)
+    end_time = time.time()
+    print "Encode time [", end_time - start_time, "]"
+
+    print "\nDecoding string"
+    start_time = time.time()
+    decoded_text = decode(root_node, encoded_text)
+    end_time = time.time()
+    print "Decode time [", end_time - start_time, "]"
+
+    print "\nDone"
+
 
 
