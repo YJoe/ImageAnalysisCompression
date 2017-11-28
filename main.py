@@ -1,6 +1,7 @@
 import numpy
 import cv2
 import time
+import re
 
 
 class Node:
@@ -72,14 +73,14 @@ def create_nodes(frequency_data):
 
 
 def append_to_node_tree(root, node_values):
-    print "\t\t\tTrying to append to root [", root.value, "(", root.frequency, ")] something form [", ",".join(str(n.value) + "(" + str(n.frequency) + ")" for n in node_values), "]"
+    #print "\t\t\tTrying to append to root [", root.value, "(", root.frequency, ")] something form [", ",".join(str(n.value) + "(" + str(n.frequency) + ")" for n in node_values), "]"
     for i in range(0, len(node_values)):
         if node_values[0].frequency >= root.frequency:
-            print "\t\t\t\tThe next node frequency [", node_values[0].frequency, "] is >= [", root.frequency, "]"
+            #print "\t\t\t\tThe next node frequency [", node_values[0].frequency, "] is >= [", root.frequency, "]"
             left_node = node_values[0]
             del node_values[0]
             root = Node(left_node, root, str(left_node.value + root.value), left_node.frequency + root.frequency)
-            print "\t\t\t\t\tAppended left node [", left_node.value, "] to existing tree"
+            #print "\t\t\t\t\tAppended left node [", left_node.value, "] to existing tree"
             return append_to_node_tree(root, node_values)
 
     # return the new root node and the node values that remain, if there are no node values then return an empty []
@@ -88,24 +89,24 @@ def append_to_node_tree(root, node_values):
 
 def create_tree(node_values):
 
-    print "\nCreating tree"
+    #print "\nCreating tree"
 
     roots = []
 
     # while there are still frequency values that haven't been appended to a tree
     while len(node_values) != 0:
 
-        print "\tThere are still frequency values [", ",".join(str(n.value) + "(" + str(n.frequency) + ")" for n in node_values), "]"
+        #print "\tThere are still frequency values [", ",".join(str(n.value) + "(" + str(n.frequency) + ")" for n in node_values), "]"
 
         # if we can't make a pair then this single element should be in its own tree
         if len(node_values) == 1:
-            print "\t\tWe can't make a pair though so placing [", node_values[0].value, "] in its own tree"
+            #print "\t\tWe can't make a pair though so placing [", node_values[0].value, "] in its own tree"
             root = node_values[0]
             del node_values[0]
 
         # we can make a pair so we will make a tree with them
         else:
-            print "\t\tThere are at least two nodes left, creating pair"
+            #print "\t\tThere are at least two nodes left, creating pair"
             # start a tree
             left = node_values[1]
             right = node_values[0]
@@ -150,14 +151,14 @@ def encode(root, regular_text):
 
 
 def decode_char(root, code):
-    if root.left_node is None and root.right_node is None:
+    if len(root.value) == 1:
         return root.value
     elif code == "":
         return None
-    elif code[0] == "0":
-        return decode_char(root.left_node, code[1:])
-    else:
+    elif code[0] == "1":
         return decode_char(root.right_node, code[1:])
+    else:
+        return decode_char(root.left_node, code[1:])
 
 
 def decode(root, code):
@@ -187,6 +188,14 @@ def image_to_string(image):
     return image_string
 
 
+def string_to_image(string):
+    arr = re.findall("\[(.*?)\]", string)
+
+    # the first set is [width, height, depth] of the image
+    width, height, depth = arr[0].split(",")
+    print width, " ", height, " ", depth
+
+
 def dct_level_off(image, sub):
     return image - [sub, sub, sub]
 
@@ -196,8 +205,6 @@ if __name__ == "__main2__":
     cv2.imshow("", img)
     cv2.waitKey()
     cv2.destroyAllWindows()
-
-    cv2.dct()
 
     print img[200][200]
     img = dct_level_off(img, 128)
@@ -216,7 +223,7 @@ if __name__ == "__main__":
     frequency_list = get_frequency_list(text)
     node_list = create_nodes(frequency_list)
     root_node = create_tree(node_list)[0]
-    print_network(root_node, "")
+    #print_network(root_node, "")
     end_time = time.time()
     print "Tree creation time [", end_time - start_time, "]"
 
@@ -231,6 +238,12 @@ if __name__ == "__main__":
     decoded_text = decode(root_node, encoded_text)
     end_time = time.time()
     print "Decode time [", end_time - start_time, "]"
+
+    print "\nString to image"
+    start_time = time.time()
+    string_to_image(decoded_text)
+    end_time = time.time()
+    print "String to image time [", end_time - start_time, "]"
 
     print "\nDone"
 
