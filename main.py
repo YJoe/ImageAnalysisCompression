@@ -1,8 +1,8 @@
-import numpy
+import threading
+import numpy as np
 import cv2
 import time
 import re
-
 
 class Node:
     def __init__(self, left_node, right_node, value, frequency):
@@ -175,6 +175,46 @@ def decode(root, code):
     return output
 
 
+def check_for_code(full_code, code_size, direc):
+    current_code = full_code[0:code_size]
+    if current_code in direc:
+        return full_code[i:], direc[current_code]
+
+    return None
+
+
+def directory_decode(root, direct, code):
+    output = ""
+
+    min = 100
+    max = 0
+
+    for dire in direct:
+        if len(dire) < min:
+            min = len(dire)
+        if len(dire) > max:
+            max = len(dire)
+
+    while len(code) != 0:
+        for i in range(min, max + 1):
+            current_code = code[0:i]
+            if current_code in direct:
+                code = code[i:]
+                output += direct[current_code]
+                break
+
+    return output
+
+
+def get_decode_directory(root):
+    directory = []
+
+    for char in root.value:
+        directory.append([encode(root, char), char])
+
+    return dict(directory)
+
+
 def image_to_string(image):
 
     height, width, depth = image.shape
@@ -182,48 +222,145 @@ def image_to_string(image):
 
     image_string = "[" + str(width) + "," + str(height) + "," + str(depth) + "]"
 
-    for i in range(0, len(flat) / 3, 3):
+    for i in range(0, len(flat), 3):
         image_string += "[" + ",".join(str(flat[i + j]) for j in range(0, 3)) + "]"
 
     return image_string
 
 
 def string_to_image(string):
+
     arr = re.findall("\[(.*?)\]", string)
 
     # the first set is [width, height, depth] of the image
     width, height, depth = arr[0].split(",")
-    print width, " ", height, " ", depth
+    width = int(width)
+    height = int(height)
+    depth = int(depth)
+    print "Width", width, " Height", height, " Depth", depth
+
+    # create a blank image with the dimensions specified by the header
+    blank_image = np.zeros((height, width, depth), np.uint8)
+
+    # get rid of the first bit of metadata because it isn't actually a pixel
+    arr = arr[1:]
+
+    # populate the image with the pixel values defined by the string
+    for i in range(0, width):
+        for j in range(0, height):
+            blank_image[i][j] = [int(arr[j + i * width].split(',')[0]), int(arr[j + i * width].split(',')[1]), int(arr[j + i * width].split(',')[2])]
+
+    return blank_image
 
 
 def dct_level_off(image, sub):
     return image - [sub, sub, sub]
 
 
-if __name__ == "__main2__":
-    img = cv2.imread('images/planet.jpg', 1)
-    cv2.imshow("", img)
-    cv2.waitKey()
-    cv2.destroyAllWindows()
+def dct_segment(image, width, height):
+    image_segs = []
+    print "Creating [", width, " x ", height, "] segments of this channel"
 
-    print img[200][200]
-    img = dct_level_off(img, 128)
-    print img[200][200]
+    for i in range(0, image.shape[0], height):
+        for j in range(0, image.shape[1], width):
+            image_segs.append(image[i:i+height, j:j+width])
+
+    return image_segs
 
 
 if __name__ == "__main__":
 
-    img = cv2.imread('images/turtle.jpg', 1)
+    img = cv2.imread('images/file.png', 1)
+    # img = cv2.imread('images/turtle.jpg', 1)
     cv2.imshow("", img)
     cv2.waitKey()
     cv2.destroyAllWindows()
+
+    dct_width = 8
+    dct_height = 8
+
+    border_w = img.shape[0] % dct_width
+    border_h = img.shape[1] % dct_height
+    img = cv2.copyMakeBorder(img, 0, border_h, 0, border_w, cv2.BORDER_CONSTANT)
+
+    cv2.imshow("", img)
+    cv2.waitKey()
+    cv2.destroyAllWindows()
+
+    # convert from BGR to YCrBr colour space
+    image_ycc = cv2.cvtColor(img, cv2.COLOR_BGR2YCR_CB)
+
+    # center the range around 0 and split into each rgb colour channel
+    img = dct_level_off(img, 128)
+    image_channels = cv2.split(img)
+
+    # get n*m segments of each channel of the image
+    image_segments = [[], [], []]
+    for i in range(0, len(image_channels)):
+        channel_float = np.float32(image_channels[i]) / 255.0
+        image_segments[i] = dct_segment(channel_float, dct_width, dct_height)
+
+        for j in range(0, len(image_segments[i])):
+            image_segments[i][j] = cv2.dct(image_segments[i][j])
+
+            for k in range(0, image_segments[i][j].shape[0]):
+                for l in range(0, image_segments[i][j].shape[1]):
+                    image_segments[i][j][k][l] = image_segments[i][j][k][l]
+
+    # Taken from [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
+    QY = np.array([[16, 11, 10, 16, 24, 40, 51, 61],
+                   [12, 12, 14, 19, 26, 48, 60, 55],
+                   [14, 13, 16, 24, 40, 57, 69, 56],
+                   [14, 17, 22, 29, 51, 87, 80, 62],
+                   [18, 22, 37, 56, 68, 109, 103, 77],
+                   [24, 35, 55, 64, 81, 104, 113, 92],
+                   [49, 64, 78, 87, 103, 121, 120, 101],
+                   [72, 92, 95, 98, 112, 100, 103, 99]], dtype=int)
+
+    # Taken from [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
+    QC = np.array([[17, 18, 24, 47, 99, 99, 99, 99],
+                   [18, 21, 26, 66, 99, 99, 99, 99],
+                   [24, 26, 56, 99, 99, 99, 99, 99],
+                   [47, 66, 99, 99, 99, 99, 99, 99],
+                   [99, 99, 99, 99, 99, 99, 99, 99],
+                   [99, 99, 99, 99, 99, 99, 99, 99],
+                   [99, 99, 99, 99, 99, 99, 99, 99],
+                   [99, 99, 99, 99, 99, 99, 99, 99]], dtype=int)
+
+    # Taken from [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
+    QF = 99.0
+    if QF < 50 and QF > 1:
+        scale = np.floor(5000 / QF)
+    elif QF < 100:
+        scale = 200 - 2 * QF
+    else:
+        print "Quality Factor must be in the range [1..99]"
+    scale = scale / 100.0
+    Q = [QY * scale, QC * scale, QC * scale]
+
+    # multiply divide channel by its quantisation table Y / QY, Cr / QC and Br / QC and apply idct to each segment
+    for i in range(0, len(Q)):
+        for channel_segment in image_segments[i]:
+            for j in range(0, channel_segment.shape[0]):
+                for k in range(0, channel_segment.shape[1]):
+                    channel_segment[j][k] = int(round(channel_segment[j][k] / Q[i][j][k]))
+
+    # put all into huffman code
+
+    print "Compression done"
+
+
+if __name__ == "__main2__":
+
+    img = cv2.imread('images/file.png', 1)
+    cv2.imshow("Original", img)
+    cv2.waitKey()
 
     start_time = time.time()
     text = image_to_string(img)
     frequency_list = get_frequency_list(text)
     node_list = create_nodes(frequency_list)
     root_node = create_tree(node_list)[0]
-    #print_network(root_node, "")
     end_time = time.time()
     print "Tree creation time [", end_time - start_time, "]"
 
@@ -235,15 +372,22 @@ if __name__ == "__main__":
 
     print "\nDecoding string"
     start_time = time.time()
-    decoded_text = decode(root_node, encoded_text)
+    #decoded_text = decode(root_node, encoded_text)
+    decode_dir = get_decode_directory(root_node)
+    print "DONE"
+    decoded_text = directory_decode(root_node, decode_dir, encoded_text)
     end_time = time.time()
     print "Decode time [", end_time - start_time, "]"
 
     print "\nString to image"
     start_time = time.time()
-    string_to_image(decoded_text)
+    decoded_image = string_to_image(decoded_text)
     end_time = time.time()
     print "String to image time [", end_time - start_time, "]"
+
+    cv2.imshow("Decoded", decoded_image)
+    cv2.waitKey()
+    cv2.destroyAllWindows()
 
     print "\nDone"
 
