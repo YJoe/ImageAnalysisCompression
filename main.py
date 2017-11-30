@@ -252,6 +252,43 @@ def string_to_image(string):
     return blank_image
 
 
+def get_quantisation_channels(quality_factor):
+
+    # array was found here [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
+    QY = np.array([[16, 11, 10, 16, 24, 40, 51, 61],
+                   [12, 12, 14, 19, 26, 48, 60, 55],
+                   [14, 13, 16, 24, 40, 57, 69, 56],
+                   [14, 17, 22, 29, 51, 87, 80, 62],
+                   [18, 22, 37, 56, 68, 109, 103, 77],
+                   [24, 35, 55, 64, 81, 104, 113, 92],
+                   [49, 64, 78, 87, 103, 121, 120, 101],
+                   [72, 92, 95, 98, 112, 100, 103, 99]], dtype=int)
+
+    # array was found here [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
+    QC = np.array([[17, 18, 24, 47, 99, 99, 99, 99],
+                   [18, 21, 26, 66, 99, 99, 99, 99],
+                   [24, 26, 56, 99, 99, 99, 99, 99],
+                   [47, 66, 99, 99, 99, 99, 99, 99],
+                   [99, 99, 99, 99, 99, 99, 99, 99],
+                   [99, 99, 99, 99, 99, 99, 99, 99],
+                   [99, 99, 99, 99, 99, 99, 99, 99],
+                   [99, 99, 99, 99, 99, 99, 99, 99]], dtype=int)
+
+    # scaling found here [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
+    if quality_factor < 50 and quality_factor > 1:
+        scale = np.floor(5000 / quality_factor)
+    elif quality_factor < 100:
+        scale = 200 - 2 * quality_factor
+    else:
+        print "Quality Factor must be in the range [1..99]"
+        exit()
+
+    scale = scale / 100.0
+
+    # store each channel quantisation table
+    return [QY * scale, QC * scale, QC * scale]
+
+
 def split_blocks(image, block_width, block_height):
     image_segs = []
     for i in range(0, image.shape[0], block_height):
@@ -262,8 +299,10 @@ def split_blocks(image, block_width, block_height):
 
 
 def combine_blocks(image_segs, image_width, image_height, sample_width, sample_height):
-    x = image_width / sample_width
-    y = image_height / sample_height
+    x = image_height / sample_height
+    y = image_width / sample_width
+
+    print x, ", ", y, " sub images"
 
     # create a blank image of the size of the combined image
     combined_image = np.zeros((y * sample_width, x * sample_height, 3), np.uint8)
@@ -293,7 +332,7 @@ def compress_block(block, quantization_table):
 
     # take dct of each block channel
     for c in range(0, 3):
-        block_channels[c] = cv2.dct(block_channels[c])
+        block_channels[c]= cv2.dct(block_channels[c])
 
     # quantization
     for c in range(0, 3):
@@ -334,57 +373,27 @@ def compress_block(block, quantization_table):
 
 if __name__ == "__main__":
 
-    #img = cv2.imread('images/file.png', 1)
-    img = cv2.imread('images/turtle.jpg', 1)
-    #img = cv2.imread('images/fish.jpg', 1)
+    #img = cv2.imread('images/turtle.jpg', 1)
+    img = cv2.imread('images/fish.jpg', 1)
 
     cv2.imshow("ORIGINAL", img)
 
+    # define the size of a block
     dct_width = 8
     dct_height = 8
 
-    border_w = img.shape[0] % dct_width
-    border_h = img.shape[1] % dct_height
-
-    print "ADDING BORDER WH[", border_w, ", ", border_h, "]"
-
+    # give the image a border so that it is divisible by 8 on both width and height
+    border_w = img.shape[1] % dct_width
+    border_h = img.shape[0] % dct_height
     img = cv2.copyMakeBorder(img, 0, border_h, 0, border_w, cv2.BORDER_CONSTANT)
 
+    # store this for later
     image_width = img.shape[0]
     image_height = img.shape[1]
 
-    # Taken from [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
-    QY = np.array([[16, 11, 10, 16, 24, 40, 51, 61],
-                   [12, 12, 14, 19, 26, 48, 60, 55],
-                   [14, 13, 16, 24, 40, 57, 69, 56],
-                   [14, 17, 22, 29, 51, 87, 80, 62],
-                   [18, 22, 37, 56, 68, 109, 103, 77],
-                   [24, 35, 55, 64, 81, 104, 113, 92],
-                   [49, 64, 78, 87, 103, 121, 120, 101],
-                   [72, 92, 95, 98, 112, 100, 103, 99]], dtype=int)
-
-    # Taken from [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
-    QC = np.array([[17, 18, 24, 47, 99, 99, 99, 99],
-                   [18, 21, 26, 66, 99, 99, 99, 99],
-                   [24, 26, 56, 99, 99, 99, 99, 99],
-                   [47, 66, 99, 99, 99, 99, 99, 99],
-                   [99, 99, 99, 99, 99, 99, 99, 99],
-                   [99, 99, 99, 99, 99, 99, 99, 99],
-                   [99, 99, 99, 99, 99, 99, 99, 99],
-                   [99, 99, 99, 99, 99, 99, 99, 99]], dtype=int)
-
-    # Taken from [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
-    QF = 10.0
-    if QF < 50 and QF > 1:
-        scale = np.floor(5000 / QF)
-    elif QF < 100:
-        scale = 200 - 2 * QF
-    else:
-        print "Quality Factor must be in the range [1..99]"
-    scale = scale / 100.0
-
-    # store each channel quantisation table
-    Q = [QY * scale, QC * scale, QC * scale]
+    # define the quality to compress 0 is low quality 99 is high, then get quanization tables
+    quality_factor = 10.0
+    Q = get_quantisation_channels(quality_factor)
 
     # convert from BGR to YCrBr colour space
     image_ycc = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
