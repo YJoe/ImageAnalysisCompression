@@ -1,4 +1,3 @@
-import threading
 import numpy as np
 import cv2
 import time
@@ -253,59 +252,106 @@ def string_to_image(string):
     return blank_image
 
 
-def dct_level_off(image, sub):
-    return image - [sub, sub, sub]
-
-
-def dct_segment(image, width, height):
+def split_blocks(image, block_width, block_height):
     image_segs = []
-    print "Creating [", width, " x ", height, "] segments of this channel"
-
-    for i in range(0, image.shape[0], height):
-        for j in range(0, image.shape[1], width):
-            image_segs.append(image[i:i+height, j:j+width])
+    for i in range(0, image.shape[0], block_height):
+        for j in range(0, image.shape[1], block_width):
+            image_segs.append(image[i:i+block_height, j:j+block_width])
 
     return image_segs
 
 
+def combine_blocks(image_segs, image_width, image_height, sample_width, sample_height):
+    x = image_width / sample_width
+    y = image_height / sample_height
+
+    # create a blank image of the size of the combined image
+    combined_image = np.zeros((y * sample_width, x * sample_height, 3), np.uint8)
+
+    k = 0
+    for i in range(0, y):
+        for j in range(0, x):
+            combined_image[i * sample_width: i * sample_width + sample_width, j * sample_height: j * sample_height + sample_height] = image_segs[k]
+            k += 1
+
+    return combined_image
+
+
+def compress_block(block, quantization_table):
+
+    # convert to from uint to int so that we can shift to negative values
+    block = np.array(block, int)
+
+    # subtract from every channel of every pixel
+    block = block - 128
+
+    # scale every channel of every pixel down within range -1 -> 1
+    block = block / 255.0
+
+    # split the block into three channels
+    block_channels = cv2.split(block)
+
+    # take dct of each block channel
+    for c in range(0, 3):
+        block_channels[c] = cv2.dct(block_channels[c])
+
+    # quantization
+    for c in range(0, 3):
+        block_channels[c] = block_channels[c] / quantization_table[c]
+        block_channels[c] = block_channels[c] * 255
+        block_channels[c] = block_channels[c].astype(int)
+        block_channels[c] = block_channels[c] / 255.0
+
+    # inverse quantisation
+    for c in range(0, 3):
+        block_channels[c] = block_channels[c] * quantization_table[c]
+
+    # take inverse dtc of block channel
+    for c in range(0, 3):
+        block_channels[c] = cv2.idct(block_channels[c])
+
+    # merge the block channels back into one ycrbr image
+    block = cv2.merge(block_channels)
+
+    # scale up by 255
+    block = block * 255
+
+    # shift range to be 0 - 255
+    block = block + 128
+
+    for i in range(0, block.shape[0]):
+        for j in range(0, block.shape[1]):
+            for c in range(0, 3):
+                if block[i][j][c] > 255:
+                    block[i][j][c] = 255
+                elif block[i][j][c] < 0:
+                    block[i][j][c] = 0
+
+    block = block.astype(np.uint8)
+
+    return block
+
+
 if __name__ == "__main__":
 
-    img = cv2.imread('images/file.png', 1)
-    # img = cv2.imread('images/turtle.jpg', 1)
-    cv2.imshow("", img)
-    cv2.waitKey()
-    cv2.destroyAllWindows()
+    #img = cv2.imread('images/file.png', 1)
+    img = cv2.imread('images/turtle.jpg', 1)
+    #img = cv2.imread('images/fish.jpg', 1)
+
+    cv2.imshow("ORIGINAL", img)
 
     dct_width = 8
     dct_height = 8
 
     border_w = img.shape[0] % dct_width
     border_h = img.shape[1] % dct_height
+
+    print "ADDING BORDER WH[", border_w, ", ", border_h, "]"
+
     img = cv2.copyMakeBorder(img, 0, border_h, 0, border_w, cv2.BORDER_CONSTANT)
 
-    cv2.imshow("", img)
-    cv2.waitKey()
-    cv2.destroyAllWindows()
-
-    # convert from BGR to YCrBr colour space
-    image_ycc = cv2.cvtColor(img, cv2.COLOR_BGR2YCR_CB)
-
-    # center the range around 0 and split into each rgb colour channel
-    img = dct_level_off(img, 128)
-    image_channels = cv2.split(img)
-
-    # get n*m segments of each channel of the image
-    image_segments = [[], [], []]
-    for i in range(0, len(image_channels)):
-        channel_float = np.float32(image_channels[i]) / 255.0
-        image_segments[i] = dct_segment(channel_float, dct_width, dct_height)
-
-        for j in range(0, len(image_segments[i])):
-            image_segments[i][j] = cv2.dct(image_segments[i][j])
-
-            for k in range(0, image_segments[i][j].shape[0]):
-                for l in range(0, image_segments[i][j].shape[1]):
-                    image_segments[i][j][k][l] = image_segments[i][j][k][l]
+    image_width = img.shape[0]
+    image_height = img.shape[1]
 
     # Taken from [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
     QY = np.array([[16, 11, 10, 16, 24, 40, 51, 61],
@@ -328,7 +374,7 @@ if __name__ == "__main__":
                    [99, 99, 99, 99, 99, 99, 99, 99]], dtype=int)
 
     # Taken from [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
-    QF = 99.0
+    QF = 10.0
     if QF < 50 and QF > 1:
         scale = np.floor(5000 / QF)
     elif QF < 100:
@@ -336,23 +382,38 @@ if __name__ == "__main__":
     else:
         print "Quality Factor must be in the range [1..99]"
     scale = scale / 100.0
+
+    # store each channel quantisation table
     Q = [QY * scale, QC * scale, QC * scale]
 
-    # multiply divide channel by its quantisation table Y / QY, Cr / QC and Br / QC and apply idct to each segment
-    for i in range(0, len(Q)):
-        for channel_segment in image_segments[i]:
-            for j in range(0, channel_segment.shape[0]):
-                for k in range(0, channel_segment.shape[1]):
-                    channel_segment[j][k] = int(round(channel_segment[j][k] / Q[i][j][k]))
+    # convert from BGR to YCrBr colour space
+    image_ycc = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
 
-    # put all into huffman code
+    # divide the image into several 8*8*3 images
+    image_blocks = split_blocks(image_ycc, dct_width, dct_height)
 
-    print "Compression done"
+    # compress blocks using the quantisation tables made eariler
+    compressed_blocks = []
+    for i in range(0, len(image_blocks)):
+        compressed_blocks.append(compress_block(image_blocks[i], Q))
+
+    # stitch together all of the compressed blocks
+    image_ycc = combine_blocks(compressed_blocks, image_width, image_height, dct_width, dct_height)
+
+    # convert the new compressed image back into the BGR colour space
+    image = cv2.cvtColor(image_ycc, cv2.COLOR_YCrCb2BGR)
+
+    # trim off the border we crated earlier
+    image = image[0: image_width - border_w , 0: image_height - border_h]
+
+    cv2.imshow("COMPRESSED", image)
+    cv2.waitKey()
 
 
 if __name__ == "__main2__":
 
-    img = cv2.imread('images/file.png', 1)
+    img = cv2.imread('images/turtle.jpg', 1)
+
     cv2.imshow("Original", img)
     cv2.waitKey()
 
