@@ -87,6 +87,50 @@ def append_to_node_tree(root, node_values):
     return root, [] if node_values is None else node_values
 
 
+def get_block_string(block):
+
+    string = ""
+
+    # get the size of the block (should be 8)
+    n = len(block)
+    j = 0
+    k = 0
+
+    # for all of the left and bottom edge indexes for this n
+    for i in range(0, n * 2 - 1):
+
+        # for the current edge loop through the diagonal from this point
+        x = j
+        y = k
+        while x >= 0 and y < len(block[0]):
+            string += str(block[x][y]) + " "
+            x -= 1
+            y += 1
+
+        # if i is still less than the block height keep iterating up
+        if i < n - 1:
+            j += 1
+
+        # i reached the mid point, start moving the other way
+        else:
+            k += 1
+
+    return string
+
+
+def huffman_string_block(block):
+
+    # split the block into three channels
+    block_channels = cv2.split(block)
+
+    huffman_channels = ["", "", ""]
+
+    for i in range(0, len(block_channels)):
+        huffman_channels[i] = get_block_string(block_channels[i])
+
+    return huffman_channels
+
+
 def create_tree(node_values):
 
     #print "\nCreating tree"
@@ -419,6 +463,7 @@ if __name__ == "__main__":
     img = cv2.imread('images/fish.jpg', 1)
 
     cv2.imshow("ORIGINAL", img)
+    cv2.waitKey()
 
     # define the size of a block
     dct_width = 8
@@ -433,7 +478,88 @@ if __name__ == "__main__":
     image_width = img.shape[0]
     image_height = img.shape[1]
 
-    # define the quality to compress 0 is low quality 99 is high, then get quanization tables
+    # define the quality to compress, 0 is low quality 99 is high, then get quanization tables
+    quality_factor = 10.0
+    Q = get_quantisation_channels(quality_factor)
+
+    # convert from BGR to YCrBr colour space
+    image_ycc = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
+
+    # divide the image into several 8*8*3 images
+    image_blocks = split_blocks(image_ycc, dct_width, dct_height)
+
+    # compress blocks using the quantisation tables made eariler
+    compressed_blocks = []
+    for i in range(0, len(image_blocks)):
+        compressed_blocks.append(compress_block(image_blocks[i], Q))
+
+    for i in range(0, len(image_blocks)):
+        h = huffman_string_block(compressed_blocks[i])
+        print ""
+        for i in h:
+            print i
+
+    # decompress blocks using the same quantisation table
+    decompressed_blocks = []
+    for i in range(0, len(compressed_blocks)):
+        decompressed_blocks.append(decompress_block(compressed_blocks[i], Q))
+
+    # stitch together all of the compressed blocks
+    image_ycc = combine_blocks(decompressed_blocks, image_width, image_height, dct_width, dct_height)
+
+    # convert the new compressed image back into the BGR colour space
+    image = cv2.cvtColor(image_ycc, cv2.COLOR_YCrCb2BGR)
+
+    # trim off the border we crated earlier
+    image = image[0: image_width - border_h, 0: image_height - border_w]
+
+    cv2.imshow("COMPRESSED", image)
+    cv2.waitKey()
+
+
+# HUF
+if __name__ == "__main2__":
+    #
+    img = cv2.imread('images/Fish.jpg', 1)
+    #
+    # cv2.imshow("Original", img)
+    # cv2.waitKey()
+
+    start_time = time.time()
+
+    text = image_to_string(img)
+    #text = "this is some super cool text"
+
+    frequency_list = get_frequency_list(text)
+    node_list = create_nodes(frequency_list)
+    root_node = create_tree(node_list)[0]
+    end_time = time.time()
+    print "Tree creation time [", end_time - start_time, "]"
+
+    print "\nEncoding string"
+    start_time = time.time()
+    encoded_text = encode(root_node, text)
+    end_time = time.time()
+    print "Encode time [", end_time - start_time, "]"
+
+    print len(encoded_text)
+
+    #################################################################################################
+
+    # define the size of a block
+    dct_width = 8
+    dct_height = 8
+
+    # give the image a border so that it is divisible by 8 on both width and height
+    border_w = img.shape[1] % dct_width
+    border_h = img.shape[0] % dct_height
+    img = cv2.copyMakeBorder(img, 0, border_h, 0, border_w, cv2.BORDER_CONSTANT)
+
+    # store this for later
+    image_width = img.shape[0]
+    image_height = img.shape[1]
+
+    # define the quality to compress, 0 is low quality 99 is high, then get quanization tables
     quality_factor = 10.0
     Q = get_quantisation_channels(quality_factor)
 
@@ -462,22 +588,10 @@ if __name__ == "__main__":
     # trim off the border we crated earlier
     image = image[0: image_width - border_h, 0: image_height - border_w]
 
-    cv2.imshow("COMPRESSED", image)
-    cv2.waitKey()
-
-
-# HUF
-if __name__ == "__main2__":
-    #
-    # img = cv2.imread('images/small.jpg', 1)
-    #
-    # cv2.imshow("Original", img)
-    # cv2.waitKey()
-
     start_time = time.time()
 
-    #text = image_to_string(img)
-    text = "this is some super cool text"
+    text = image_to_string(img)
+    # text = "this is some super cool text"
 
     frequency_list = get_frequency_list(text)
     node_list = create_nodes(frequency_list)
@@ -491,10 +605,12 @@ if __name__ == "__main2__":
     end_time = time.time()
     print "Encode time [", end_time - start_time, "]"
 
-    print encoded_text
+    print len(encoded_text)
 
-    write_to_bin("test.bin", encoded_text)
-    read_from_bin("test.bin")
+    # print encoded_text
+    #
+    # write_to_bin("test.bin", encoded_text)
+    # read_from_bin("test.bin")
 
     #
     # print "\nDecoding string"
