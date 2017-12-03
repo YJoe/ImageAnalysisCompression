@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import time
 import re
+import struct
 
 class Node:
     def __init__(self, left_node, right_node, value, frequency):
@@ -302,8 +303,6 @@ def combine_blocks(image_segs, image_width, image_height, sample_width, sample_h
     x = image_height / sample_height
     y = image_width / sample_width
 
-    print x, ", ", y, " sub images"
-
     # create a blank image of the size of the combined image
     combined_image = np.zeros((y * sample_width, x * sample_height, 3), np.uint8)
 
@@ -324,8 +323,8 @@ def compress_block(block, quantization_table):
     # subtract from every channel of every pixel
     block = block - 128
 
-    # scale every channel of every pixel down within range -1 -> 1
-    block = block / 255.0
+    # convert block to float
+    block = block / 1.0
 
     # split the block into three channels
     block_channels = cv2.split(block)
@@ -337,9 +336,18 @@ def compress_block(block, quantization_table):
     # quantization
     for c in range(0, 3):
         block_channels[c] = block_channels[c] / quantization_table[c]
-        block_channels[c] = block_channels[c] * 255
         block_channels[c] = block_channels[c].astype(int)
-        block_channels[c] = block_channels[c] / 255.0
+
+    # merge the block channels back into one ycrbr image
+    block = cv2.merge(block_channels)
+
+    return block
+
+
+def decompress_block(block, quantization_table):
+
+    # split the block into three channels
+    block_channels = cv2.split(block)
 
     # inverse quantisation
     for c in range(0, 3):
@@ -352,12 +360,10 @@ def compress_block(block, quantization_table):
     # merge the block channels back into one ycrbr image
     block = cv2.merge(block_channels)
 
-    # scale up by 255
-    block = block * 255
-
     # shift range to be 0 - 255
     block = block + 128
 
+    # truncate the block so that all pixels are within the range 0-255
     for i in range(0, block.shape[0]):
         for j in range(0, block.shape[1]):
             for c in range(0, 3):
@@ -366,11 +372,47 @@ def compress_block(block, quantization_table):
                 elif block[i][j][c] < 0:
                     block[i][j][c] = 0
 
-    block = block.astype(np.uint8)
-
     return block
 
 
+def write_to_bin(file_name, byte_string):
+
+    print "Writing bin string"
+
+    # cut the string into groups of 8 char making sure that any left over are prefixed by 0
+    byte_chunks = [byte_string[i:i+8].zfill(8) for i in range(0, len(byte_string), 8)]
+
+    bytes = []
+
+    # convert bytes into numbers
+    for b in byte_chunks:
+        bytes.append(int(b, 2))
+
+    byte_arr = bytearray(bytes)
+
+    print byte_arr
+    bin_file = open(file_name, "wb")
+    bin_file.write(bytes(byte_arr))
+
+
+def read_from_bin(file_name):
+    print "Reading from bin"
+    f = open(file_name, "rb")
+    file_bytes = []
+
+    try:
+        byte = f.read(1)
+        while byte != "":
+            file_bytes.append(byte)
+            byte = f.read(1)
+    finally:
+        f.close()
+
+    for file_byte in file_bytes:
+        process_byte(file_byte)
+
+
+# DCT
 if __name__ == "__main__":
 
     #img = cv2.imread('images/turtle.jpg', 1)
@@ -406,28 +448,37 @@ if __name__ == "__main__":
     for i in range(0, len(image_blocks)):
         compressed_blocks.append(compress_block(image_blocks[i], Q))
 
+    # decompress blocks using the same quantisation table
+    decompressed_blocks = []
+    for i in range(0, len(compressed_blocks)):
+        decompressed_blocks.append(decompress_block(compressed_blocks[i], Q))
+
     # stitch together all of the compressed blocks
-    image_ycc = combine_blocks(compressed_blocks, image_width, image_height, dct_width, dct_height)
+    image_ycc = combine_blocks(decompressed_blocks, image_width, image_height, dct_width, dct_height)
 
     # convert the new compressed image back into the BGR colour space
     image = cv2.cvtColor(image_ycc, cv2.COLOR_YCrCb2BGR)
 
     # trim off the border we crated earlier
-    image = image[0: image_width - border_w , 0: image_height - border_h]
+    image = image[0: image_width - border_h, 0: image_height - border_w]
 
     cv2.imshow("COMPRESSED", image)
     cv2.waitKey()
 
 
+# HUF
 if __name__ == "__main2__":
-
-    img = cv2.imread('images/turtle.jpg', 1)
-
-    cv2.imshow("Original", img)
-    cv2.waitKey()
+    #
+    # img = cv2.imread('images/small.jpg', 1)
+    #
+    # cv2.imshow("Original", img)
+    # cv2.waitKey()
 
     start_time = time.time()
-    text = image_to_string(img)
+
+    #text = image_to_string(img)
+    text = "this is some super cool text"
+
     frequency_list = get_frequency_list(text)
     node_list = create_nodes(frequency_list)
     root_node = create_tree(node_list)[0]
@@ -440,26 +491,31 @@ if __name__ == "__main2__":
     end_time = time.time()
     print "Encode time [", end_time - start_time, "]"
 
-    print "\nDecoding string"
-    start_time = time.time()
-    #decoded_text = decode(root_node, encoded_text)
-    decode_dir = get_decode_directory(root_node)
-    print "DONE"
-    decoded_text = directory_decode(root_node, decode_dir, encoded_text)
-    end_time = time.time()
-    print "Decode time [", end_time - start_time, "]"
+    print encoded_text
 
-    print "\nString to image"
-    start_time = time.time()
-    decoded_image = string_to_image(decoded_text)
-    end_time = time.time()
-    print "String to image time [", end_time - start_time, "]"
+    write_to_bin("test.bin", encoded_text)
+    read_from_bin("test.bin")
 
-    cv2.imshow("Decoded", decoded_image)
-    cv2.waitKey()
-    cv2.destroyAllWindows()
+    #
+    # print "\nDecoding string"
+    # start_time = time.time()
+    # #decoded_text = decode(root_node, encoded_text)
+    # decode_dir = get_decode_directory(root_node)
+    # print "DONE"
+    # decoded_text = directory_decode(root_node, decode_dir, encoded_text)
+    # end_time = time.time()
+    # print "Decode time [", end_time - start_time, "]"
+    #
+    # print "\nString to image"
+    # start_time = time.time()
+    # decoded_image = string_to_image(decoded_text)
+    # end_time = time.time()
+    # print "String to image time [", end_time - start_time, "]"
+    #
+    # cv2.imshow("Decoded", decoded_image)
+    # cv2.waitKey()
+    # cv2.destroyAllWindows()
 
     print "\nDone"
-
 
 
