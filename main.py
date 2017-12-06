@@ -3,6 +3,8 @@ import cv2
 import time
 import re
 import struct
+import os
+
 
 class Node:
     def __init__(self, left_node, right_node, value, frequency):
@@ -666,11 +668,27 @@ def decompress_image(file_name):
     cv2.waitKey()
 
 
+def get_size_in_mb(file_name):
+    return int(os.path.getsize(image)) / 1024.0 / 1024.0
+
 
 if __name__ == "__main__":
 
-    #compress_image(cv2.imread('images/turtle.ppm', 1), 10.0, "test.bin")
-    decompress_image("test.bin")
+    image = "images/turtle.ppm"
+    binary_file = "turtle.bin"
+    print "Image file size [", get_size_in_mb(image), "MB]"
+
+    start_time = time.time()
+    compress_image(cv2.imread(image, 1), 10.0, binary_file)
+    end_time = time.time()
+    print "Compression time [", end_time - start_time, "]"
+
+    print "Bin file size [", get_size_in_mb(binary_file), "MB]"
+
+    # start_time = time.time()
+    # decompress_image("1COMP.bin")
+    # end_time = time.time()
+    # print "Decompression time [", end_time - start_time, "]"
 
 
 # HUF
