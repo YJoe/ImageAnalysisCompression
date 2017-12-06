@@ -669,7 +669,7 @@ def decompress_image(file_name):
 
 
 def get_size_in_mb(file_name):
-    return int(os.path.getsize(image)) / 1024.0 / 1024.0
+    return int(os.path.getsize(file_name)) / 1024.0 / 1024.0
 
 
 if __name__ == "__main__":
