@@ -69,24 +69,9 @@ def create_nodes(frequency_data):
     node_data = []
 
     for f in frequency_data:
-        node_data.append(Node(None, None, f[0], f[1]))
+        node_data.append(Node(None, None, [f[0]], f[1]))
 
     return node_data
-
-
-def append_to_node_tree(root, node_values):
-    #print "\t\t\tTrying to append to root [", root.value, "(", root.frequency, ")] something form [", ",".join(str(n.value) + "(" + str(n.frequency) + ")" for n in node_values), "]"
-    for i in range(0, len(node_values)):
-        if node_values[0].frequency >= root.frequency:
-            #print "\t\t\t\tThe next node frequency [", node_values[0].frequency, "] is >= [", root.frequency, "]"
-            left_node = node_values[0]
-            del node_values[0]
-            root = Node(left_node, root, str(left_node.value) + str(root.value), left_node.frequency + root.frequency)
-            #print "\t\t\t\t\tAppended left node [", left_node.value, "] to existing tree"
-            return append_to_node_tree(root, node_values)
-
-    # return the new root node and the node values that remain, if there are no node values then return an empty []
-    return root, [] if node_values is None else node_values
 
 
 def get_block_channel_values(block):
@@ -123,65 +108,49 @@ def get_block_channel_values(block):
 
 def create_tree(node_values):
 
-    #print "\nCreating tree"
+    # as long as we have two more nodes
+    while len(node_values) > 1:
 
-    roots = []
+        # pick the two smallest nodes
+        left = node_values[0]
+        right = node_values[1]
 
-    # while there are still frequency values that haven't been appended to a tree
-    while len(node_values) != 0:
+        # create a new node from the two
+        root = Node(left, right, left.value + right.value, left.frequency + right.frequency)
 
-        #print "\tThere are still frequency values [", ",".join(str(n.value) + "(" + str(n.frequency) + ")" for n in node_values), "]"
+        # delete the two nodes we just used up
+        del node_values[0]
+        del node_values[0]
 
-        # if we can't make a pair then this single element should be in its own tree
-        if len(node_values) == 1:
-            #print "\t\tWe can't make a pair though so placing [", node_values[0].value, "] in its own tree"
-            root = node_values[0]
-            del node_values[0]
+        node_values.append(root)
+        node_values = sorted(node_values, key=lambda n: n.frequency)
 
-        # we can make a pair so we will make a tree with them
-        else:
-            #print "\t\tThere are at least two nodes left, creating pair"
-            # start a tree
-            left = node_values[1]
-            right = node_values[0]
-            root = Node(left, right, str(left.value) + str(right.value), left.frequency + right.frequency)
+    print_network(node_values[0], "")
 
-            # remove the two nodes that are now in the tree
-            del node_values[0]
-            del node_values[0]
-
-            root, node_values = append_to_node_tree(root, node_values)
-
-        roots.append(root)
-
-    if len(roots) != 1:
-        # make sure that our roots are still ordered by frequency
-        roots = sorted(roots, key=lambda n: n.frequency)
-        roots = create_tree(roots)
-
-    return roots
+    return node_values[0]
 
 
-def encode_char(root, char, code):
-
-    if char == root.value:
+def encode_number(root, number, code):
+    if len(root.value) == 1:
         return code
 
-    elif char in root.left_node.value:
+    elif number in root.left_node.value:
         code += "0"
-        return encode_char(root.left_node, char, code)
+        return encode_number(root.left_node, number, code)
 
-    elif char in root.right_node.value:
+    elif number in root.right_node.value:
         code += "1"
-        return encode_char(root.right_node, char, code)
+        return encode_number(root.right_node, number, code)
 
     else:
         print "ERROR WHILE DECODING"
         return "?"
 
 
-def encode(root, regular_text):
-    return "".join(encode_char(root, letter, "") for letter in regular_text)
+def encode(root, values):
+    encoded_string = ""
+
+    return "".join(encode_number(root, v, "") for v in values)
 
 
 def decode_char(root, code):
@@ -218,7 +187,7 @@ def check_for_code(full_code, code_size, direc):
 
 
 def directory_decode(root, direct, code):
-    output = ""
+    output = []
 
     min = 100
     max = 0
@@ -229,12 +198,13 @@ def directory_decode(root, direct, code):
         if len(dire) > max:
             max = len(dire)
 
-    while len(code) != 0:
+    code_index = 0
+    while code_index < len(code):
         for i in range(min, max + 1):
-            current_code = code[0:i]
+            current_code = code[code_index:code_index + i]
             if current_code in direct:
-                code = code[i:]
-                output += direct[current_code]
+                code_index += i
+                output.append(direct[current_code])
                 break
 
     return output
@@ -243,8 +213,8 @@ def directory_decode(root, direct, code):
 def get_decode_directory(root):
     directory = []
 
-    for char in root.value:
-        directory.append([encode(root, char), char])
+    for v in root.value:
+        directory.append([encode_number(root, v, ""), v])
 
     return dict(directory)
 
@@ -290,14 +260,14 @@ def string_to_image(string):
 def get_quantisation_channels(quality_factor):
 
     # array was found here [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
-    QY = np.array([[16, 11, 10, 16, 24, 40, 51, 61],
-                   [12, 12, 14, 19, 26, 48, 60, 55],
-                   [14, 13, 16, 24, 40, 57, 69, 56],
-                   [14, 17, 22, 29, 51, 87, 80, 62],
-                   [18, 22, 37, 56, 68, 109, 103, 77],
-                   [24, 35, 55, 64, 81, 104, 113, 92],
+    QY = np.array([[16, 11, 10, 16, 24,  40,  51,  61 ],
+                   [12, 12, 14, 19, 26,  48,  60,  55 ],
+                   [14, 13, 16, 24, 40,  57,  69,  56 ],
+                   [14, 17, 22, 29, 51,  87,  80,  62 ],
+                   [18, 22, 37, 56, 68,  109, 103, 77 ],
+                   [24, 35, 55, 64, 81,  104, 113, 92 ],
                    [49, 64, 78, 87, 103, 121, 120, 101],
-                   [72, 92, 95, 98, 112, 100, 103, 99]], dtype=int)
+                   [72, 92, 95, 98, 112, 100, 103, 99 ]], dtype=int)
 
     # array was found here [https://www.hdm-stuttgart.de/~maucher/Python/MMCodecs/html/jpegUpToQuant.html]
     QC = np.array([[17, 18, 24, 47, 99, 99, 99, 99],
@@ -577,19 +547,22 @@ def compress_image(img, quality_factor, file_name):
         block_channel_values.append(get_block_channel_values(compressed_blocks[i]))
 
     # join all values into a string for tree analysis
-    print "Joining values to str"
-    all_block_channel_values_str = " ".join(str(v) for b in block_channel_values for v in b)
+    print "Joining values to arr"
+
+    all_block_values = []
+    for i in range(0, len(block_channel_values)):
+        all_block_values += block_channel_values[i]
 
     # get the frequency of each of the value so that we can build a tree
     print "Creating huffman tree"
-    frequency_list = get_frequency_list(all_block_channel_values_str)
+    frequency_list = get_frequency_list(all_block_values)
 
     node_list = create_nodes(frequency_list)
-    root_node = create_tree(node_list)[0]
+    root_node = create_tree(node_list)
 
     # encode the big string we made
     print "Encoding str with huffman tree"
-    bin_str = encode(root_node, all_block_channel_values_str)
+    bin_str = encode(root_node, all_block_values)
 
     # make a bit of a guess as to how big the file will be
     print "Current string size   [", len(bin_str) * 8, "(bits), ", len(bin_str), "(bytes), ", len(bin_str) / 1024, "(kb)]"
@@ -627,21 +600,19 @@ def decompress_image(file_name):
 
     frequency_list = []
     for i in range(5, len(h) - 1, 2):
-        frequency_list.append([h[i], int(h[i+1])])
+        frequency_list.append([int(h[i]), int(h[i+1])])
 
     node_list = create_nodes(frequency_list)
-    root_node = create_tree(node_list)[0]
+    root_node = create_tree(node_list)
 
-    # get a directory of all of the values for faster comparisons
+    # get a directory of all of the values for faster comparisonss
     print "Getting directory from root node"
     decode_dir = get_decode_directory(root_node)
 
     # decode the binary string
     print "Using directory to decode binary string"
-    decoded_image_string = directory_decode(root_node, decode_dir, bin_str)
+    decoded_image_arr = directory_decode(root_node, decode_dir, bin_str)
 
-    # split the decoded string into a string for each block
-    decoded_image_arr = decoded_image_string.split(" ")
     decoded_blocks = []
     for i in range(0, len(decoded_image_arr), 192):
         decoded_blocks.append(array_to_image(rearrange_block(decoded_image_arr[i : i + 192], dct_width)))
@@ -664,8 +635,7 @@ def decompress_image(file_name):
     print "Removing any extra border"
     image = image[0: image_width - border_h, 0: image_height - border_w]
 
-    cv2.imshow("COMPRESSED", image)
-    cv2.waitKey()
+    return image
 
 
 def get_size_in_mb(file_name):
@@ -676,136 +646,24 @@ if __name__ == "__main__":
 
     image = "images/turtle.ppm"
     binary_file = "turtle.bin"
-    print "Image file size [", get_size_in_mb(image), "MB]"
+    mode = "d"
+    comp_val = 5.0
 
-    start_time = time.time()
-    compress_image(cv2.imread(image, 1), 10.0, binary_file)
-    end_time = time.time()
-    print "Compression time [", end_time - start_time, "]"
+    if mode == "c":
+        print "Image file size [", get_size_in_mb(image), "MB]"
 
-    print "Bin file size [", get_size_in_mb(binary_file), "MB]"
+        start_time = time.time()
+        compress_image(cv2.imread(image, 1), comp_val, binary_file)
+        end_time = time.time()
+        print "Compression time [", end_time - start_time, "]"
 
-    # start_time = time.time()
-    # decompress_image("1COMP.bin")
-    # end_time = time.time()
-    # print "Decompression time [", end_time - start_time, "]"
+        print "Bin file size [", get_size_in_mb(binary_file), "MB]"
 
+    else:
+        start_time = time.time()
+        image = decompress_image(binary_file)
+        end_time = time.time()
+        print "Decompression time [", end_time - start_time, "]"
 
-# HUF
-if __name__ == "__main2__":
-    #
-    img = cv2.imread('images/Fish.jpg', 1)
-    #
-    # cv2.imshow("Original", img)
-    # cv2.waitKey()
-
-    start_time = time.time()
-
-    text = image_to_string(img)
-    #text = "this is some super cool text"
-
-    frequency_list = get_frequency_list(text)
-    node_list = create_nodes(frequency_list)
-    root_node = create_tree(node_list)[0]
-    end_time = time.time()
-    print "Tree creation time [", end_time - start_time, "]"
-
-    print "\nEncoding string"
-    start_time = time.time()
-    encoded_text = encode(root_node, text)
-    end_time = time.time()
-    print "Encode time [", end_time - start_time, "]"
-
-    print len(encoded_text)
-
-    #################################################################################################
-
-    # define the size of a block
-    dct_width = 8
-    dct_height = 8
-
-    # give the image a border so that it is divisible by 8 on both width and height
-    border_w = img.shape[1] % dct_width
-    border_h = img.shape[0] % dct_height
-    img = cv2.copyMakeBorder(img, 0, border_h, 0, border_w, cv2.BORDER_CONSTANT)
-
-    # store this for later
-    image_width = img.shape[0]
-    image_height = img.shape[1]
-
-    # define the quality to compress, 0 is low quality 99 is high, then get quanization tables
-    quality_factor = 10.0
-    Q = get_quantisation_channels(quality_factor)
-
-    # convert from BGR to YCrBr colour space
-    image_ycc = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
-
-    # divide the image into several 8*8*3 images
-    image_blocks = split_blocks(image_ycc, dct_width, dct_height)
-
-    # compress blocks using the quantisation tables made eariler
-    compressed_blocks = []
-    for i in range(0, len(image_blocks)):
-        compressed_blocks.append(compress_block(image_blocks[i], Q))
-
-    # decompress blocks using the same quantisation table
-    decompressed_blocks = []
-    for i in range(0, len(compressed_blocks)):
-        decompressed_blocks.append(decompress_block(compressed_blocks[i], Q))
-
-    # stitch together all of the compressed blocks
-    image_ycc = combine_blocks(decompressed_blocks, image_width, image_height, dct_width, dct_height)
-
-    # convert the new compressed image back into the BGR colour space
-    image = cv2.cvtColor(image_ycc, cv2.COLOR_YCrCb2BGR)
-
-    # trim off the border we crated earlier
-    image = image[0: image_width - border_h, 0: image_height - border_w]
-
-    start_time = time.time()
-
-    text = image_to_string(img)
-    # text = "this is some super cool text"
-
-    frequency_list = get_frequency_list(text)
-    node_list = create_nodes(frequency_list)
-    root_node = create_tree(node_list)[0]
-    end_time = time.time()
-    print "Tree creation time [", end_time - start_time, "]"
-
-    print "\nEncoding string"
-    start_time = time.time()
-    encoded_text = encode(root_node, text)
-    end_time = time.time()
-    print "Encode time [", end_time - start_time, "]"
-
-    print len(encoded_text)
-
-    # print encoded_text
-    #
-    # write_to_bin("test.bin", encoded_text)
-    # read_from_bin("test.bin")
-
-    #
-    # print "\nDecoding string"
-    # start_time = time.time()
-    # #decoded_text = decode(root_node, encoded_text)
-    # decode_dir = get_decode_directory(root_node)
-    # print "DONE"
-    # decoded_text = directory_decode(root_node, decode_dir, encoded_text)
-    # end_time = time.time()
-    # print "Decode time [", end_time - start_time, "]"
-    #
-    # print "\nString to image"
-    # start_time = time.time()
-    # decoded_image = string_to_image(decoded_text)
-    # end_time = time.time()
-    # print "String to image time [", end_time - start_time, "]"
-    #
-    # cv2.imshow("Decoded", decoded_image)
-    # cv2.waitKey()
-    # cv2.destroyAllWindows()
-
-    print "\nDone"
-
-
+        cv2.imshow("COMPRESSED", image)
+        cv2.waitKey()
