@@ -642,12 +642,41 @@ def get_size_in_mb(file_name):
     return int(os.path.getsize(file_name)) / 1024.0 / 1024.0
 
 
+def mse(original, new):
+    total = 0.0
+
+    for i in range(0, len(original)):
+        for j in range(0, len(original[0])):
+            total_pixel_error = 0
+            for k in range(0, 3):
+                total_pixel_error += pow(int(original[i][j][k]) - int(new[i][j][k]), 2)
+            total += total_pixel_error / 3.0
+
+    print "Mean Square Error (MSE) [", total / (len(original) * len(original[0])), "]"
+
+def mae(original, new):
+    total = 0.0
+
+    for i in range(0, len(original)):
+        for j in range(0, len(original[0])):
+            total_pixel_error = 0
+            for k in range(0, 3):
+                total_pixel_error += abs(int(original[i][j][k]) - int(new[i][j][k]))
+            total += total_pixel_error / 3.0
+
+    print "Mean Absolute Error (MAE) [", total / (len(original) * len(original[0])), "]"
+
+
+
 if __name__ == "__main__":
 
     image = "images/turtle.ppm"
     binary_file = "turtle.bin"
-    mode = "c"
+    mode = "d"
     comp_val = 75.0
+
+    cv2.imshow("ORIGINAL", cv2.imread(image, 1))
+    cv2.waitKey()
 
     if mode == "c":
         starting_size = int(os.path.getsize(image)) * 1.0
@@ -656,7 +685,7 @@ if __name__ == "__main__":
         start_time = time.time()
         compress_image(cv2.imread(image, 1), comp_val, binary_file)
         end_time = time.time()
-        print "Compression time [", end_time - start_time, "]"
+        print "Compression time [", end_time - start_time, "(Seconds)]"
 
         comp_size = int(os.path.getsize(binary_file)) * 1.0
         print "Bin file size [", get_size_in_mb(binary_file), "MB]"
@@ -665,9 +694,12 @@ if __name__ == "__main__":
 
     else:
         start_time = time.time()
-        image = decompress_image(binary_file)
+        decompressed = decompress_image(binary_file)
         end_time = time.time()
         print "Decompression time [", end_time - start_time, "]"
 
-        cv2.imshow("COMPRESSED", image)
+        mse(cv2.imread(image, 1), decompressed)
+        mae(cv2.imread(image, 1), decompressed)
+
+        cv2.imshow("COMPRESSED", decompressed)
         cv2.waitKey()
