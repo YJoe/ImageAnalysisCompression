@@ -646,10 +646,11 @@ if __name__ == "__main__":
 
     image = "images/turtle.ppm"
     binary_file = "turtle.bin"
-    mode = "d"
-    comp_val = 5.0
+    mode = "c"
+    comp_val = 75.0
 
     if mode == "c":
+        starting_size = int(os.path.getsize(image)) * 1.0
         print "Image file size [", get_size_in_mb(image), "MB]"
 
         start_time = time.time()
@@ -657,7 +658,10 @@ if __name__ == "__main__":
         end_time = time.time()
         print "Compression time [", end_time - start_time, "]"
 
+        comp_size = int(os.path.getsize(binary_file)) * 1.0
         print "Bin file size [", get_size_in_mb(binary_file), "MB]"
+        compression_ratio = starting_size / comp_size
+        print "Compression ratio is [", compression_ratio, "]"
 
     else:
         start_time = time.time()
