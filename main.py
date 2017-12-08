@@ -409,6 +409,8 @@ def write_to_bin(file_name, frequency_list, quality_factor, image_width, image_h
     bin_file = open(file_name, "wb")
     bin_file.write(header_str)
     bin_file.write(byte_array)
+    bin_file.flush()
+    bin_file.close()
 
 
 def read_from_bin(file_name):
@@ -654,6 +656,7 @@ def mse(original, new):
 
     print "Mean Square Error (MSE) [", total / (len(original) * len(original[0])), "]"
 
+
 def mae(original, new):
     total = 0.0
 
@@ -667,39 +670,59 @@ def mae(original, new):
     print "Mean Absolute Error (MAE) [", total / (len(original) * len(original[0])), "]"
 
 
-
 if __name__ == "__main__":
 
-    image = "images/turtle.ppm"
-    binary_file = "turtle.bin"
+    # define the image to compress and the binary file to save
+    image = "images/1.ppm"
+    binary_file = "1.bin"
+
+    # define the mode in which to use the software and if compressing, the quality value of the compression
     mode = "d"
     comp_val = 75.0
 
     cv2.imshow("ORIGINAL", cv2.imread(image, 1))
     cv2.waitKey()
 
+    # using the compression mode
     if mode == "c":
+
+        # read the starting size of the image
         starting_size = int(os.path.getsize(image)) * 1.0
         print "Image file size [", get_size_in_mb(image), "MB]"
 
+        # begin a timer for compression
         start_time = time.time()
+
+        # compress the image
         compress_image(cv2.imread(image, 1), comp_val, binary_file)
+
+        # end the timer and display the result
         end_time = time.time()
         print "Compression time [", end_time - start_time, "(Seconds)]"
 
+        # read the compressed file size and display the compression ratio between the two
         comp_size = int(os.path.getsize(binary_file)) * 1.0
         print "Bin file size [", get_size_in_mb(binary_file), "MB]"
         compression_ratio = starting_size / comp_size
         print "Compression ratio is [", compression_ratio, "]"
 
+    # using the decompression mode
     else:
+
+        # start a timer for decompression
         start_time = time.time()
+
+        # decompress the given file
         decompressed = decompress_image(binary_file)
+
+        # stop the timer and display the result
         end_time = time.time()
         print "Decompression time [", end_time - start_time, "]"
 
-        mse(cv2.imread(image, 1), decompressed)
-        mae(cv2.imread(image, 1), decompressed)
-
+        # display the decompressed image
         cv2.imshow("COMPRESSED", decompressed)
         cv2.waitKey()
+
+        # read the MSE and MAE of the decompressed image
+        mse(cv2.imread(image, 1), decompressed)
+        mae(cv2.imread(image, 1), decompressed)
